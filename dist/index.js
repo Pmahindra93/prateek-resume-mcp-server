@@ -1,6 +1,6 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { CallToolRequestSchema, ListToolsRequestSchema, } from "@modelcontextprotocol/sdk/types.js";
+import { CallToolRequestSchema, ListToolsRequestSchema, ListPromptsRequestSchema, GetPromptRequestSchema, } from "@modelcontextprotocol/sdk/types.js";
 // Resume data structure
 const resumeData = {
     personalInfo: {
@@ -160,6 +160,41 @@ const tools = [
         },
     }
 ];
+// Define available prompts
+const prompts = [
+    {
+        name: "role_fit_analyzer",
+        description: "Analyze how well Prateek fits a specific job role",
+        arguments: [
+            {
+                name: "job_description",
+                description: "The job posting or role requirements",
+                required: true
+            },
+            {
+                name: "focus_area",
+                description: "Technical skills, leadership, or cultural fit",
+                required: false
+            }
+        ]
+    },
+    {
+        name: "cover_letter_generator",
+        description: "Create a personalized cover letter highlighting relevant experience",
+        arguments: [
+            {
+                name: "company_name",
+                description: "Target company name",
+                required: true
+            },
+            {
+                name: "role_title",
+                description: "Position being applied for",
+                required: true
+            }
+        ]
+    }
+];
 // Create server instance
 const server = new Server({
     name: "resume-server",
@@ -167,11 +202,88 @@ const server = new Server({
 }, {
     capabilities: {
         tools: {},
+        prompts: {},
     },
 });
 // List tools handler
 server.setRequestHandler(ListToolsRequestSchema, async () => {
     return { tools };
+});
+// List prompts handler
+server.setRequestHandler(ListPromptsRequestSchema, async () => {
+    return { prompts };
+});
+// Get prompt handler
+server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+    const { name, arguments: args } = request.params;
+    switch (name) {
+        case "role_fit_analyzer":
+            const jobDescription = args?.job_description || "";
+            const focusArea = args?.focus_area || "overall fit";
+            return {
+                description: `Analyze Prateek's fit for this role focusing on ${focusArea}`,
+                messages: [
+                    {
+                        role: "user",
+                        content: {
+                            type: "text",
+                            text: `You are an expert technical recruiter. Analyze how well this candidate fits the role:
+
+CANDIDATE PROFILE:
+${JSON.stringify(resumeData, null, 2)}
+
+JOB DESCRIPTION:
+${jobDescription}
+
+ANALYSIS FOCUS: ${focusArea}
+
+Provide a detailed analysis covering:
+1. Overall Fit Score (1-10)
+2. Key Strengths & Exact Matches
+3. Potential Gaps or Concerns
+4. Specific Interview Talking Points
+5. Salary Expectations for This Role
+6. Questions Prateek Should Ask
+
+Be specific and reference actual projects and achievements.`
+                        }
+                    }
+                ]
+            };
+        case "cover_letter_generator":
+            const companyName = args?.company_name || "";
+            const roleTitle = args?.role_title || "";
+            return {
+                description: `Generate a personalized cover letter for ${roleTitle} at ${companyName}`,
+                messages: [
+                    {
+                        role: "user",
+                        content: {
+                            type: "text",
+                            text: `Create a compelling cover letter for this application:
+
+CANDIDATE: ${resumeData.personalInfo.name}
+ROLE: ${roleTitle}
+COMPANY: ${companyName}
+
+CANDIDATE BACKGROUND:
+${JSON.stringify(resumeData, null, 2)}
+
+Write a professional cover letter that:
+1. Opens with a strong hook related to the role
+2. Highlights 2-3 most relevant achievements with specific metrics
+3. Shows knowledge of/interest in the company
+4. Demonstrates cultural fit and passion
+5. Ends with a confident call to action
+
+Keep it concise (under 400 words) and avoid generic phrases.`
+                        }
+                    }
+                ]
+            };
+        default:
+            throw new Error(`Unknown prompt: ${name}`);
+    }
 });
 // Tool execution handler
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
